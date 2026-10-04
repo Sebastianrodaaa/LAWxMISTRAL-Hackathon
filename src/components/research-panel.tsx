@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { ChatProse } from "@/components/chat-prose";
+import type { ChatCitation } from "@/lib/chat-events";
+import { readChat } from "@/lib/chat-stream";
 import type { Hit } from "@/lib/types";
 import { HarnessNote, type HarnessDebate } from "./harness-note";
 import { Field, inputClass, primaryButton } from "./ui";
@@ -23,6 +26,8 @@ export function ResearchPanel({ seed }: { seed?: string }) {
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState("");
+  const [citations, setCitations] = useState<ChatCitation[]>([]);
 
   async function run(nextQuery?: string) {
     const asked = (nextQuery ?? query).trim();
@@ -34,33 +39,43 @@ export function ResearchPanel({ seed }: { seed?: string }) {
     setReflection("");
     setConfidence(undefined);
     setDebate([]);
+    setSynthesis("");
+    setCitations([]);
+    setStatus("Reading the library");
+    setLive(false);
     try {
       const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: asked }),
       });
-      const payload = (await response.json()) as {
-        error?: string;
-        synthesis?: string;
-        hits?: Hit[];
-        live?: boolean;
-        warning?: string;
-        reflection?: string;
-        confidence?: number;
-        debate?: HarnessDebate[];
-      };
-      if (!response.ok) {
-        setError(payload.error || "Research did not run.");
-        return;
-      }
-      setSynthesis(payload.synthesis || "");
-      setHits(payload.hits || []);
-      setLive(Boolean(payload.live));
-      setWarning(payload.warning || "");
-      setReflection(payload.reflection || "");
-      setConfidence(typeof payload.confidence === "number" ? payload.confidence : undefined);
-      setDebate(payload.debate || []);
+      const hits: Hit[] = [];
+      const done = await readChat(response, (event) => {
+        if (event.type === "status") setStatus(event.label);
+        else if (event.type === "citations") setCitations(event.citations);
+        else if (event.type === "step" && (event.step.tool === "research" || event.step.tool === "web")) {
+          if (event.step.tool === "web") setLive(true);
+          hits.push({
+            title: event.step.label,
+            publisher: event.step.detail,
+            excerpt: "",
+            origin: event.step.tool === "web" ? "web" : "library",
+          });
+          setHits([...hits]);
+        } else if (event.type === "token") {
+          setStatus("");
+          setSynthesis((current) => current + event.text);
+        } else if (event.type === "done") {
+          setSynthesis(event.text);
+          setWarning(event.warning || "");
+          setReflection(event.reflection || "");
+          setConfidence(typeof event.confidence === "number" ? event.confidence : undefined);
+          setDebate(event.debate || []);
+          if (event.citations?.length) setCitations(event.citations);
+        }
+      });
+      setSynthesis(done.text);
+      if (hits.length) setHits(hits);
     } catch {
       setError("Research did not run. Check the connection and try again.");
     } finally {
@@ -105,12 +120,14 @@ export function ResearchPanel({ seed }: { seed?: string }) {
         ))}
       </div>
       {error ? <p className="text-sm text-warn">{error}</p> : null}
-      {synthesis ? (
+      {synthesis || pending ? (
         <div className="surface p-4" aria-live="polite">
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-gold">
-            {live ? "Note · library and live web" : "Note · source library"}
+            {status || (live ? "Note · library and live web" : "Note · source library")}
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-paper">{synthesis}</p>
+          <div className="mt-3">
+            <ChatProse text={synthesis} citations={citations} streaming={pending} />
+          </div>
           {warning ? <p className="mt-2 text-sm text-warn">{warning}</p> : null}
           <HarnessNote reflection={reflection} confidence={confidence} debate={debate} />
         </div>

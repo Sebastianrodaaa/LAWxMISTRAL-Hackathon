@@ -29,11 +29,12 @@ export function NgoDashboard({ entryNav, matterId: entryMatter }: { entryNav?: s
   const [showCase, setShowCase] = useState(Boolean(entryMatter));
   const [sanction, setSanction] = useState<Sanction | null>(null);
   const [developNonce, setDevelopNonce] = useState(0);
+  const [investorId, setInvestorId] = useState<string | null>(null);
   const go = useRef<(navId: string) => void>(() => {});
 
   return (
     <SidebarWithTabs
-      companyName="Atrium"
+      companyName="Bina.ai"
       storageKey="atrium-ngo-tabs"
       navItems={navItems}
       entryNav={entryNav}
@@ -42,10 +43,21 @@ export function NgoDashboard({ entryNav, matterId: entryMatter }: { entryNav?: s
         <>
           <NavBridge bind={(fn) => { go.current = fn; }} />
           {navId === "generate" ? <NewMatter sanction={sanction} nonce={developNonce} /> : null}
-          {navId === "investors" ? <CapitalDirectory /> : null}
+          {navId === "investors" ? <CapitalDirectory selectedId={investorId} onSelect={setInvestorId} /> : null}
           {navId === "agent" ? <NgoAgent matterId={matterId || undefined} onMatter={setMatterId} /> : null}
           {navId === "pitches" && showCase && matterId ? (
-            <CaseView matterId={matterId} onBack={() => setShowCase(false)} onInvestors={() => go.current("investors")} />
+            <CaseView
+              matterId={matterId}
+              onBack={() => setShowCase(false)}
+              onInvestors={() => {
+                setInvestorId(null);
+                go.current("investors");
+              }}
+              onOpenInvestor={(id) => {
+                setInvestorId(id);
+                go.current("investors");
+              }}
+            />
           ) : null}
           {navId === "pitches" && !(showCase && matterId) ? (
             <SanctionsFeed

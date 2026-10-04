@@ -203,7 +203,38 @@ function cleanMessage(message: RakazoMessage): RakazoMessage {
           ];
         })
       : undefined,
+    citations: cleanCitations(message.citations),
+    attachments: cleanAttachments(message.attachments),
   };
+}
+
+function cleanAttachments(value: RakazoMessage["attachments"]) {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.flatMap((item) => {
+    if (!item || (item.kind !== "sanction" && item.kind !== "file") || typeof item.label !== "string" || !item.label.trim()) return [];
+    return [{ kind: item.kind, label: item.label.trim().slice(0, 120) }];
+  });
+  return items.length ? items.slice(0, 20) : undefined;
+}
+
+function cleanCitations(value: RakazoMessage["citations"]) {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.flatMap((item) => {
+    if (!item || typeof item.n !== "number" || typeof item.title !== "string") return [];
+    const origin = item.origin === "web" || item.origin === "folder" || item.origin === "library" ? item.origin : "library";
+    const url = typeof item.url === "string" && /^https?:\/\//.test(item.url) ? item.url.slice(0, 400) : undefined;
+    return [
+      {
+        n: Math.round(item.n),
+        title: item.title.slice(0, 160),
+        publisher: String(item.publisher || "").slice(0, 80),
+        origin,
+        excerpt: String(item.excerpt || "").slice(0, 500),
+        url,
+      },
+    ];
+  });
+  return items.length ? items.slice(0, 10) : undefined;
 }
 
 function normalizeRoutine(value: unknown): RakazoRoutine[] {

@@ -34,10 +34,20 @@ export type AgentStep = {
 
 export type AgentSource = "mistral" | "desk";
 
+export type MessageCitation = {
+  n: number;
+  title: string;
+  publisher: string;
+  origin: "library" | "web" | "folder";
+  excerpt: string;
+  url?: string;
+};
+
 export type RakazoMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  attachments?: { kind: "sanction" | "file"; label: string }[];
   steps?: AgentStep[];
   source?: AgentSource;
   model?: string;
@@ -45,6 +55,7 @@ export type RakazoMessage = {
   reflection?: string;
   confidence?: number;
   debate?: { round: number; critic: string; verdict: "needs_revision" | "acceptable" }[];
+  citations?: MessageCitation[];
 };
 
 export type RakazoThread = {

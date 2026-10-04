@@ -171,6 +171,16 @@ textarea {
   }
 }
 
+/* Author display beats the browser's closed-popover rule, so a utility
+   like `block` would leave every source card on screen. */
+.citation-card:not(:popover-open) {
+  display: none;
+}
+
+.citation-card:popover-open {
+  display: block;
+}
+
 .scrollbar-hide {
   scrollbar-width: none;
 }

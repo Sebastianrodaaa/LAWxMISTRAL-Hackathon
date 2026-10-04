@@ -6,8 +6,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Atrium",
-    template: "%s · Atrium",
+    default: "Bina.ai",
+    template: "%s · Bina.ai",
   },
   description:
     "A desk where NGOs turn a class-action folder into a pitch, and hedge funds and litigation funders diligence it.",

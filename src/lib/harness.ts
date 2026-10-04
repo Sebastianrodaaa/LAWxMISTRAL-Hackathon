@@ -1,3 +1,4 @@
+import type { ChatCitation, ChatEvent } from "./chat-events";
 import { corpus, rankLibrary } from "./corpus";
 import { mistralError } from "./mistral";
 import type { Hit } from "./types";
@@ -33,7 +34,7 @@ export type HarnessResult = {
   answer: string;
   reflection: string;
   confidence: number;
-  citations: HarnessCitation[];
+  citations: ChatCitation[];
   debate: DebateRound[];
   cached: boolean;
   model: string;
@@ -53,6 +54,7 @@ type HarnessInput = {
   sources?: HarnessCitation[];
   graph?: string;
   note?: string;
+  emit?: (event: Extract<ChatEvent, { type: "status" | "round" | "token" | "step" | "citations" }>) => void;
 };
 
 type CacheEntry = { at: number; value: HarnessResult };
@@ -65,6 +67,7 @@ Your role is to provide rigorous, well-grounded legal analysis based strictly on
 
 Rules:
 - Only make claims that are directly supported by the provided citations
+- Cite the supporting source at the end of each factual sentence as [1] or [1][2], using only numbers from the source list
 - Always reference specific documents when making legal arguments
 - Identify key legal principles, precedents, and statutory interpretations
 - Note any conflicting authorities or jurisdictional differences
@@ -124,7 +127,8 @@ const REVISION_PROMPT = `You are an expert legal scholar revising your analysis 
 Address each challenge raised by the critic and strengthen your analysis.
 Maintain strict grounding in the provided source documents.
 If a challenge cannot be addressed due to source limitations, acknowledge this explicitly.
-Do not add cases, statutes, or figures that are not in the sources.`;
+Do not add cases, statutes, or figures that are not in the sources.
+Keep each source marker, such as [1], on the sentence it supports.`;
 
 const PITCH_SCHOLAR = `You are the writing desk at Atrium. Rewrite the slide narrative so it is specific to this folder.
 Use only facts in the folder or in the draft. Do not invent parties, dollar amounts, class sizes, dates, docket numbers, or citations.
@@ -139,6 +143,7 @@ Return JSON only, shaped as {"slides":[{"kicker":"","title":"","body":"","bullet
 export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
   const query = input.query.trim().slice(0, 2000);
   const cacheKey = [
+    "cite-v1",
     input.task,
     input.model,
     query,
@@ -149,7 +154,20 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
   const hit = readCache(cacheKey);
   if (hit) return { ...hit, cached: true };
 
+  input.emit?.({ type: "status", label: "Reading the sources" });
   const retrieved = await retrieve(query, input);
+  for (const citation of retrieved.citations.slice(0, 6)) {
+    input.emit?.({
+      type: "step",
+      step: {
+        tool: citation.origin === "web" ? "web" : citation.origin === "folder" ? "read_document" : "research",
+        label: citation.title,
+        detail: citation.publisher,
+        href: citation.url,
+      },
+    });
+  }
+  input.emit?.({ type: "status", label: "Drafting the note" });
   const citationsText = retrieved.citations
     .map((item, index) => `[${index + 1}] ${item.title} (${item.origin}, ${item.publisher}):\n${item.excerpt}`)
     .join("\n\n");
@@ -172,7 +190,7 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
         `Source documents:\n${citationsText || "No sources were retrieved."}`,
         input.task === "pitch"
           ? "Provide the 10-slide JSON from these sources only."
-          : "Provide a concise legal analysis based strictly on these sources. Two or three short paragraphs.",
+          : "Provide a concise legal analysis based strictly on these sources. Two or three short paragraphs. End each factual sentence with its source marker, for example [1].",
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -193,10 +211,17 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
       critic: clip(critique.summary, 500),
       verdict: critique.verdict,
     });
+    input.emit?.({
+      type: "round",
+      round,
+      verdict: critique.verdict,
+      critic: clip(critique.summary, 500),
+    });
     if (critique.verdict !== "needs_revision" || round >= MAX_ROUNDS) {
       completeDebate = true;
       break;
     }
+    input.emit?.({ type: "status", label: `Revising · round ${round}` });
     const challenges = critique.challenges.map((item) => `- ${item}`).join("\n");
     analysis = stripFences(
       await complete(
@@ -219,12 +244,30 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
     round += 1;
   }
 
+  const citations = publicCitations(retrieved.citations);
+  let answer = analysis;
+  if (input.task !== "pitch") {
+    input.emit?.({ type: "citations", citations });
+    input.emit?.({ type: "status", label: "Writing the note" });
+    let streamed = "";
+    try {
+      await streamPresent(input.key, input.model, query, analysis, (text) => {
+        streamed += text;
+        input.emit?.({ type: "token", text });
+      });
+    } catch {
+      // Keep any sentences already sent. A later fallback is used only when nothing arrived.
+    }
+    answer = withMarkers(streamed.trim(), analysis);
+    if (!streamed.trim() && answer) input.emit?.({ type: "token", text: answer });
+  }
+
   const result: HarnessResult = {
     query,
-    answer: input.task === "pitch" ? analysis : clip(analysis, 4000),
+    answer: input.task === "pitch" ? analysis : answer.slice(0, 4000),
     reflection: reflection.reflection,
     confidence: reflection.confidence,
-    citations: retrieved.citations,
+    citations,
     debate,
     cached: false,
     model: input.model,
@@ -362,6 +405,95 @@ async function criticize(
   } catch {
     return { verdict: "acceptable" as const, challenges: [] as string[], summary: "The critic could not finish a challenge." };
   }
+}
+
+const PRESENT_PROMPT = `You write the note a colleague reads on this desk.
+Rewrite the analysis below as two or three short paragraphs of plain sentences.
+Separate paragraphs with a blank line.
+Do not use markdown, asterisks, headings, or bullet lists.
+Do not mention a critic, a debate, a revision, or your own process.
+Do not add facts that are not in the analysis.
+Keep every figure the analysis states.
+Keep every source marker, such as [1] or [2], in the sentence it supports.
+Do not drop a marker, spell it out as "Source 1", or invent a number that is not in the analysis.`;
+
+async function streamPresent(
+  key: string,
+  model: string,
+  query: string,
+  analysis: string,
+  onToken: (text: string) => void,
+) {
+  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    signal: AbortSignal.timeout(28000),
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      max_tokens: 500,
+      stream: true,
+      messages: [
+        { role: "system", content: PRESENT_PROMPT },
+        { role: "user", content: `Question: ${query}\n\nAnalysis:\n${analysis.slice(0, 4000)}` },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(await mistralError(response));
+  if (!response.body) throw new Error("Empty Mistral response");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      const parsed = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] };
+      const text = parsed.choices?.[0]?.delta?.content;
+      if (text) onToken(text);
+    }
+  }
+}
+
+function withMarkers(presented: string, analysis: string) {
+  if (/\[\d{1,2}\]/.test(presented)) return presented;
+  if (/\[\d{1,2}\]/.test(analysis)) return presentLocally(analysis);
+  return presented;
+}
+
+function publicCitations(items: HarnessCitation[]): ChatCitation[] {
+  return items.slice(0, 10).map((item, index) => ({
+    n: index + 1,
+    title: item.title.slice(0, 160),
+    publisher: item.publisher.slice(0, 80),
+    origin: item.origin,
+    excerpt: item.excerpt.slice(0, 500),
+    url: item.url && /^https?:\/\//.test(item.url) ? item.url : undefined,
+  }));
+}
+
+function presentLocally(analysis: string) {
+  const cleaned = analysis
+    .replace(/^\s*(\*\*)?revised analysis:?(\*\*)?\s*/i, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/^#{1,3}\s+/gm, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  const paragraphs = cleaned
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part && !/^however, the critic\b/i.test(part) && !/^the critic\b/i.test(part));
+  return paragraphs.slice(0, 3).join("\n\n").slice(0, 1800);
 }
 
 async function complete(key: string, model: string, system: string, user: string, json = false) {

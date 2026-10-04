@@ -209,16 +209,35 @@ export function planDesk(message: string, brief: MatterBrief): PlannedCall[] {
   return calls;
 }
 
-export async function runDesk(message: string, ctx: ToolContext) {
+export async function runDesk(
+  message: string,
+  ctx: ToolContext,
+  emit?: (event: { type: "status"; label: string } | { type: "step"; step: AgentStep }) => void,
+) {
   const outcomes: ToolOutcome[] = [];
-  for (const call of planDesk(message, ctx.brief)) {
-    outcomes.push(await executeTool(call.name, call.args, ctx));
+  const calls = planDesk(message, ctx.brief);
+  if (!calls.length) emit?.({ type: "status", label: "Reading the question" });
+  for (const call of calls) {
+    emit?.({ type: "status", label: toolStatus(call.name) });
+    const outcome = await executeTool(call.name, call.args, ctx);
+    outcomes.push(outcome);
+    emit?.({ type: "step", step: outcome.step });
   }
   return {
     text: composeDesk(message, ctx.brief, outcomes),
     steps: outcomes.map((outcome) => outcome.step),
     memories: outcomes.flatMap((outcome) => (outcome.memory ? [outcome.memory] : [])),
   };
+}
+
+function toolStatus(name: string) {
+  if (name === "read_matter") return "Reading the folder";
+  if (name === "read_document") return "Opening a file";
+  if (name === "research") return "Searching the library";
+  if (name === "rank_capital") return "Scoring the book";
+  if (name === "draft_outreach") return "Drafting a note";
+  if (name === "remember") return "Saving a note";
+  return "Working";
 }
 
 export async function executeTool(

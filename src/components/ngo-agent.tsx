@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeft } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, PanelLeft } from "lucide-react";
 import { buildMatter } from "@/lib/build";
 import { library } from "@/lib/library";
-import { money } from "@/lib/format";
 import { sanctionById } from "@/lib/sanctions";
 import { AgentActivity } from "@/components/agent-activity";
-import { HarnessNote } from "@/components/harness-note";
+import { addDroppedFiles, AttachmentChips, ChatAttach, documentsFromAttachments, type ChatAttachment } from "@/components/chat-attach";
+import { ChatProse } from "@/components/chat-prose";
+import type { ChatEvent } from "@/lib/chat-events";
+import { readChat } from "@/lib/chat-stream";
 import { AGENT_MODELS, type MatterBrief, type RakazoMessage } from "@/lib/rakazo-types";
 import { DEFAULT_ROUTINES, freshThread, setAgentRun, updateRakazo, useRakazoDesk } from "@/lib/rakazo-desk";
 import { useStore } from "@/lib/store";
-import type { Matter } from "@/lib/types";
+import type { DocketFile, Matter } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { useTabs } from "@/components/sidebar-with-tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: string) => void }) {
   const { drafts } = useStore();
@@ -29,11 +33,13 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
     setPicked(matterId);
   }
   const [draft, setDraft] = useState("");
+  const [attachedByThread, setAttachedByThread] = useState<Record<string, ChatAttachment[]>>({});
+  const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState("");
   const [panel, setPanel] = useState(false);
   const [chatsOpen, setChatsOpen] = useState(true);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [live, setLive] = useState<(RakazoMessage & { status: string }) | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const pickedMatter = matters.find((item) => item.id === picked) ?? matters[0];
   const thread = desk.threads.find((item) => item.id === desk.activeId) ?? desk.threads[0];
@@ -41,25 +47,69 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
   const matter = sanction
     ? buildMatter(sanction.files, { id: sanction.id, origin: "desk", shared: false })
     : pickedMatter;
+  const attached = thread ? attachedByThread[thread.id] ?? [] : [];
+  const subject = conversationMatter(matter, attached);
+
+  function setAttached(next: ChatAttachment[]) {
+    if (!thread) return;
+    setAttachedByThread((current) => ({ ...current, [thread.id]: next }));
+  }
 
   useEffect(() => {
     const node = logRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [thread?.messages.length, busy, thread?.id]);
+  }, [thread?.messages.length, busy, thread?.id, live?.text, live?.status]);
 
   async function send(raw: string) {
     const text = raw.trim();
-    if (!text || busy || !matter || !thread) return;
+    const pending = thread ? attachedByThread[thread.id] ?? [] : [];
+    const reading = conversationMatter(matter, pending);
+    if ((!text && !pending.length) || busy || !reading || !thread) return;
     setBusy(true);
     setAgentRun({ running: true, prompt: text.slice(0, 80) });
     setDraft("");
-    const user: RakazoMessage = { id: uid(), role: "user", text };
+    if (pending.length) setAttached([]);
+    const liveId = uid();
+    const paint = {
+      text: "",
+      status: "Reading the folder",
+      steps: [] as RakazoMessage["steps"],
+      debate: [] as RakazoMessage["debate"],
+      citations: [] as RakazoMessage["citations"],
+    };
+    let timer = 0;
+    const show = () => {
+      timer = 0;
+      setLive({
+        id: liveId,
+        role: "assistant",
+        text: paint.text,
+        steps: paint.steps,
+        debate: paint.debate,
+        citations: paint.citations,
+        status: paint.status,
+      });
+    };
+    show();
+    setFocusId(liveId);
+    const schedule = () => {
+      if (timer) return;
+      timer = window.setTimeout(show, 0);
+    };
+    const asked = text || "Read what I attached.";
+    const user: RakazoMessage = {
+      id: uid(),
+      role: "user",
+      text: asked,
+      attachments: pending.length ? pending.map((item) => ({ kind: item.kind, label: item.label })) : undefined,
+    };
     const prior = thread.messages;
+    const sanctionAttachment = pending.find((item) => item.kind === "sanction");
     updateRakazo((state) =>
       mapThread(state, thread.id, (current) => ({
         ...current,
-        title: current.title === "New conversation" ? text.slice(0, 48) : current.title,
-        matterId: current.matterId.startsWith("sanction:") ? current.matterId : matter.id,
+        title: current.title === "New conversation" ? asked.slice(0, 48) : current.title,
+        matterId: sanctionAttachment ? sanctionAttachment.id : current.matterId.startsWith("sanction:") ? current.matterId : reading.id,
         updated: new Date().toISOString(),
         messages: [...current.messages, user].slice(-80),
       })),
@@ -72,35 +122,36 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
         body: JSON.stringify({
           model: desk.model,
           memory: desk.memory.map((item) => item.note),
-          messages: [...prior, user].slice(-12).map((item) => ({ role: item.role, text: item.text })),
-          matter: toBrief(matter),
+          messages: [...prior, user].slice(-12).map((item) => ({ role: item.role, text: messageForAgent(item) })),
+          matter: toBrief(reading),
         }),
       });
-      const data = (await response.json()) as {
-        error?: string;
-        text?: string;
-        steps?: RakazoMessage["steps"];
-        source?: RakazoMessage["source"];
-        model?: string;
-        warning?: string;
-        memories?: string[];
-        reflection?: string;
-        confidence?: number;
-        debate?: RakazoMessage["debate"];
-      };
-      if (!response.ok || !data.text) throw new Error(data.error || "Rakazo did not answer.");
+      const data = await readChat(response, (event: ChatEvent) => {
+        if (event.type === "status") paint.status = event.label;
+        else if (event.type === "citations") paint.citations = event.citations;
+        else if (event.type === "step") paint.steps = [...(paint.steps ?? []), event.step];
+        else if (event.type === "round") {
+          paint.status = `Critic · round ${event.round}`;
+          paint.debate = [...(paint.debate ?? []), { round: event.round, critic: event.critic, verdict: event.verdict }];
+        } else if (event.type === "token") paint.text += event.text;
+        else return;
+        schedule();
+      });
+      if (timer) window.clearTimeout(timer);
       const assistant: RakazoMessage = {
-        id: uid(),
+        id: liveId,
         role: "assistant",
         text: data.text,
-        steps: data.steps,
+        steps: data.steps ?? paint.steps,
         source: data.source,
         model: data.model,
         warning: data.warning,
         reflection: data.reflection,
         confidence: data.confidence,
-        debate: data.debate,
+        debate: data.debate ?? paint.debate,
+        citations: data.citations ?? paint.citations,
       };
+      setLive(null);
       setFocusId(assistant.id);
       updateRakazo((state) => {
         const withReply = mapThread(state, thread.id, (current) => ({
@@ -118,6 +169,8 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
         return { ...withReply, memory: [...added, ...withReply.memory].slice(0, 24) };
       });
     } catch (error) {
+      if (timer) window.clearTimeout(timer);
+      setLive(null);
       const assistant: RakazoMessage = {
         id: uid(),
         role: "assistant",
@@ -136,10 +189,11 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
     }
   }
 
-  const focused = thread?.messages.find((item) => item.id === focusId && item.role === "assistant")
+  const focused = (live && focusId === live.id ? live : undefined)
+    ?? thread?.messages.find((item) => item.id === focusId && item.role === "assistant")
     ?? [...(thread?.messages ?? [])].reverse().find((item) => item.role === "assistant");
 
-  if (!matter || !thread) {
+  if (!thread) {
     return (
       <div className="flex h-full items-center justify-center px-6">
         <div className="max-w-md">
@@ -154,7 +208,7 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="flex items-center justify-end gap-2 border-b border-line px-3 py-2">
+      <header className="flex items-center justify-end gap-2 border-b border-line px-3 py-2 lg:hidden">
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <label className="min-w-36 md:hidden">
             <span className="sr-only">Conversation</span>
@@ -170,25 +224,6 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
               ))}
             </select>
           </label>
-          <label className="min-w-32">
-            <span className="sr-only">Model</span>
-            <select
-              value={desk.model}
-              onChange={(event) =>
-                updateRakazo((state) => ({
-                  ...state,
-                  model: AGENT_MODELS.some((item) => item.id === event.target.value) ? (event.target.value as typeof desk.model) : "default",
-                }))
-              }
-              className={selectClass}
-            >
-              {AGENT_MODELS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <button type="button" className="h-9 cursor-pointer rounded-xl bg-elevated px-3 text-sm font-medium lg:hidden" onClick={() => setPanel(true)}>
             Computer
           </button>
@@ -196,8 +231,8 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className={`hidden shrink-0 flex-col border-r border-line bg-ink md:flex ${chatsOpen ? "w-56" : "w-12"}`}>
-          <div className={`flex items-center gap-1 ${chatsOpen ? "p-2" : "justify-center p-1.5"}`}>
+        <aside className={`hidden shrink-0 flex-col border-x border-[#c6c6c8] bg-ink md:flex ${chatsOpen ? "w-56" : "w-12"}`}>
+          <div className={`flex items-center gap-1 border-b border-[#c6c6c8] ${chatsOpen ? "p-2" : "justify-center p-1.5"}`}>
             {chatsOpen ? (
               <button
                 type="button"
@@ -251,71 +286,82 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div ref={logRef} className="min-h-0 flex-1 overflow-auto px-4 py-4" role="log" aria-live="polite" aria-relevant="additions">
-            {thread.messages.length === 0 ? (
-              <EmptyState matter={matter} onPick={(prompt) => void send(prompt)} />
+            {thread.messages.length === 0 && !live ? (
+              <EmptyState title={subject?.title} ngo={subject?.ngo} onPick={(prompt) => void send(prompt)} />
             ) : (
-              <ol className="mx-auto flex max-w-3xl flex-col gap-5">
+            <ol className="mx-auto flex max-w-3xl flex-col gap-5">
                 {thread.messages.map((message) => (
                   <li key={message.id}>
                     {message.role === "user" ? (
-                      <p className="ml-auto max-w-xl rounded-2xl bg-fill px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-white">{message.text}</p>
-                    ) : (
-                      <article>
-                        <button type="button" className="cursor-pointer text-left" onClick={() => setFocusId(message.id)}>
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>
-                        </button>
-                        {message.steps?.length ? (
-                          <ul className="mt-3 space-y-1">
-                            {message.steps.map((step, index) => (
-                              <li key={`${step.tool}-${index}`} className="rounded-lg bg-ink px-2.5 py-1.5 text-xs">
-                                <span className="font-medium">{step.label}</span>
-                                <span className="text-faint"> · {step.detail}</span>
+                      <div className="ml-auto max-w-xl rounded-2xl bg-fill px-3.5 py-2.5 text-sm leading-relaxed text-white">
+                        <p className="whitespace-pre-wrap">{message.text}</p>
+                        {message.attachments?.length ? (
+                          <ul className="mt-2 space-y-1">
+                            {message.attachments.map((item) => (
+                              <li key={`${item.kind}:${item.label}`} className="truncate text-xs text-white/80">
+                                {item.kind === "sanction" ? "Sanction" : "File"} · {item.label}
                               </li>
                             ))}
                           </ul>
                         ) : null}
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <p className="text-[11px] text-faint">{messageLabel(message)}</p>
-                          {message.warning ? <p className="text-[11px] text-warn">{message.warning}</p> : null}
-                          <button
-                            type="button"
-                            className="cursor-pointer text-[11px] font-medium text-gold"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(message.text);
-                              setCopied(message.id);
-                            }}
-                          >
-                            {copied === message.id ? "Copied" : "Copy"}
-                          </button>
+                      </div>
+                    ) : (
+                      <article>
+                        <div className="text-left" onClick={() => setFocusId(message.id)}>
+                          <ChatProse text={message.text} citations={message.citations} />
                         </div>
-                        <HarnessNote
-                          reflection={message.reflection}
-                          confidence={message.confidence}
-                          debate={message.debate}
-                        />
                       </article>
                     )}
                   </li>
                 ))}
-                {busy ? <li className="text-sm text-muted">On the computer…</li> : null}
+                {live ? (
+                  <li>
+                    <article aria-live="polite">
+                      {live.status ? (
+                        <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-gold uppercase">{live.status}</p>
+                      ) : null}
+                      <ChatProse text={live.text} citations={live.citations} streaming />
+                    </article>
+                  </li>
+                ) : null}
               </ol>
             )}
           </div>
           <form
-            className="border-t border-line px-3 py-3"
+            className="px-3 pt-2 pb-3"
             onSubmit={(event) => {
               event.preventDefault();
               void send(draft);
             }}
           >
-            <div className="mx-auto max-w-3xl">
+            <div
+              className={cn(
+                "mx-auto max-w-3xl rounded-2xl border bg-panel transition-colors duration-200",
+                over ? "border-gold" : "border-line",
+              )}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setOver(true);
+              }}
+              onDragLeave={() => setOver(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setOver(false);
+                void addDroppedFiles(attached, event.dataTransfer).then((result) => setAttached(result.attachments));
+              }}
+            >
+              {attached.length ? (
+                <div className="px-3 pt-3">
+                  <AttachmentChips attachments={attached} disabled={busy} onRemove={(id) => setAttached(attached.filter((item) => item.id !== id))} />
+                </div>
+              ) : null}
               <label className="block">
                 <span className="sr-only">Message Rakazo</span>
                 <textarea
                   value={draft}
                   maxLength={2000}
-                  rows={3}
-                  placeholder={`Ask about ${matter.title}`}
+                  rows={2}
+                  placeholder={subject ? `Ask about ${subject.title}` : "Attach a sanction, files, or a folder"}
                   disabled={busy}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -324,15 +370,21 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
                       void send(draft);
                     }
                   }}
-                  className="w-full resize-none rounded-2xl bg-elevated px-3 py-2.5 text-sm leading-relaxed outline-none"
+                  className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed text-paper outline-none placeholder:text-faint"
                 />
               </label>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <p className="text-[11px] text-faint">Enter to send. Nothing is emailed. Ask {money(matter.assumptions.fundingAsk)}.</p>
-                <div className="flex gap-2">
+              <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                <div className="flex min-w-0 items-center gap-1">
+                  <ChatAttach attachments={attached} disabled={busy} onChange={setAttached} />
+                  <ModelPicker
+                    model={desk.model}
+                    onChange={(model) => updateRakazo((state) => ({ ...state, model }))}
+                  />
+                </div>
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="h-9 cursor-pointer rounded-xl px-3 text-sm text-muted disabled:opacity-40"
+                    className="h-8 cursor-pointer rounded-lg px-2 text-xs text-muted hover:bg-elevated hover:text-paper disabled:opacity-40"
                     disabled={!draft.trim() || desk.routines.length >= 8}
                     onClick={() => {
                       const prompt = draft.trim();
@@ -344,12 +396,18 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
                           { id: uid(), label: prompt.slice(0, 32), prompt: prompt.slice(0, 400) },
                         ].slice(0, 8),
                       }));
+                      setDraft("");
                     }}
                   >
                     Save routine
                   </button>
-                  <button type="submit" className="h-9 cursor-pointer rounded-xl bg-fill px-3 text-sm font-semibold text-white disabled:opacity-40" disabled={busy || !draft.trim()}>
-                    Send
+                  <button
+                    type="submit"
+                    aria-label="Send"
+                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-fill text-white transition-colors duration-200 hover:bg-fill-2 disabled:cursor-not-allowed disabled:bg-elevated disabled:text-faint"
+                    disabled={busy || (!draft.trim() && !attached.length)}
+                  >
+                    <ArrowUp className="h-4 w-4" />
                   </button>
                 </div>
               </div>
@@ -359,7 +417,8 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
 
         <aside className="hidden w-80 shrink-0 flex-col border-l border-line bg-ink lg:flex">
           <Computer
-            steps={focused?.steps ?? []}
+            message={focused?.role === "assistant" ? focused : null}
+            running={busy}
             memory={desk.memory}
             routines={desk.routines}
             busy={busy}
@@ -379,7 +438,8 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
               </button>
             </div>
             <Computer
-              steps={focused?.steps ?? []}
+              message={focused?.role === "assistant" ? focused : null}
+              running={busy}
               memory={desk.memory}
               routines={desk.routines}
               busy={busy}
@@ -397,29 +457,9 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
   );
 }
 
-function EmptyState({ matter, onPick }: { matter: Matter; onPick: (prompt: string) => void }) {
-  return (
-    <div className="mx-auto max-w-lg pt-6">
-      <p className="text-[13px] font-medium text-gold">Rakazo</p>
-      <h1 className="mt-2 font-serif text-4xl tracking-tight">What should I take first?</h1>
-      <p className="mt-3 text-sm leading-relaxed text-muted">
-        I stay on {matter.title} for {matter.ngo}. I can read the folder, score mandates, draft a note, and search the source library. Memory and routines stay in this browser.
-      </p>
-      <ul className="mt-5 space-y-2">
-        {DEFAULT_ROUTINES.map((routine) => (
-          <li key={routine.id}>
-            <button type="button" className="w-full cursor-pointer rounded-xl bg-elevated px-3 py-3 text-left text-sm font-medium hover:bg-hover" onClick={() => onPick(routine.prompt)}>
-              {routine.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function Computer({
-  steps,
+  message,
+  running,
   memory,
   routines,
   busy,
@@ -427,7 +467,8 @@ function Computer({
   onForget,
   onDropRoutine,
 }: {
-  steps: NonNullable<RakazoMessage["steps"]>;
+  message: (RakazoMessage & { status?: string }) | null;
+  running: boolean;
   memory: { id: string; note: string }[];
   routines: { id: string; label: string; prompt: string }[];
   busy: boolean;
@@ -438,7 +479,7 @@ function Computer({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto">
       <div className="border-b border-line p-3">
-        <AgentActivity steps={steps} />
+        <AgentActivity key={message?.id ?? "idle"} message={message} running={running} />
       </div>
       <section className="border-b border-line p-3">
         <h2 className="text-[13px] font-medium">Memory</h2>
@@ -488,11 +529,39 @@ function sanctionFromThread(matterId: string | undefined) {
   return sanctionById(matterId.slice("sanction:".length));
 }
 
-function messageLabel(message: RakazoMessage) {
-  if (message.source === "mistral") {
-    return AGENT_MODELS.find((item) => item.id === message.model)?.label ?? "Mistral";
-  }
-  return "Desk";
+function conversationMatter(open: Matter | undefined, attachments: ChatAttachment[]): Matter | undefined {
+  if (!attachments.length) return open;
+  const extra = documentsFromAttachments(attachments);
+  const first = attachments.find((item) => item.kind === "sanction");
+  const sanction = first?.kind === "sanction" ? sanctionById(first.sanctionId) : undefined;
+  const base = sanction
+    ? buildMatter(sanction.files, { id: `sanction:${sanction.id}`, origin: "desk", shared: false })
+    : open ?? (extra.length ? buildMatter(extra, { origin: "desk", shared: false }) : undefined);
+  if (!base) return undefined;
+  const labels = attachments.map((item) => item.label).join(", ");
+  return {
+    ...base,
+    summary: `Attached for this conversation: ${labels}. ${base.summary}`,
+    documents: mergeDocuments(sanction ? extra : [...extra, ...base.documents]),
+  };
+}
+
+function mergeDocuments(files: DocketFile[]) {
+  const seen = new Set<string>();
+  return files
+    .filter((file) => {
+      const key = file.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 40);
+}
+
+function messageForAgent(message: RakazoMessage) {
+  if (!message.attachments?.length) return message.text;
+  const labels = message.attachments.map((item) => `${item.kind === "sanction" ? "sanction" : "file"} ${item.label}`).join(", ");
+  return `${message.text}\n\nAttached: ${labels}.`;
 }
 
 function toBrief(matter: Matter): MatterBrief {
@@ -547,3 +616,67 @@ function uid() {
 }
 
 const selectClass = "h-9 w-full cursor-pointer rounded-xl border border-transparent bg-elevated px-3 text-sm";
+
+const MODEL_NOTES: Record<(typeof AGENT_MODELS)[number]["id"], string> = {
+  default: "Balanced desk model",
+  "mistral-medium-3-5": "Longer notes and closer reading",
+  "mistral-small-latest": "Faster replies",
+  "mistral-large-latest": "Harder research questions",
+};
+
+function ModelPicker({
+  model,
+  onChange,
+}: {
+  model: (typeof AGENT_MODELS)[number]["id"];
+  onChange: (model: (typeof AGENT_MODELS)[number]["id"]) => void;
+}) {
+  const current = AGENT_MODELS.find((item) => item.id === model) ?? AGENT_MODELS[0];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex h-8 max-w-40 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-elevated hover:text-paper">
+        <span className="truncate">{current.label}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-64">
+        {AGENT_MODELS.map((item) => (
+          <DropdownMenuItem key={item.id} className="items-start gap-2" onSelect={() => onChange(item.id)}>
+            <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", item.id === model ? "text-gold" : "opacity-0")} />
+            <span className="min-w-0">
+              <span className="block text-sm">{item.label}</span>
+              <span className="block text-xs text-muted">{MODEL_NOTES[item.id]}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function EmptyState({ title, ngo, onPick }: { title?: string; ngo?: string; onPick: (prompt: string) => void }) {
+  return (
+    <div className="mx-auto flex h-full max-w-lg flex-col justify-center py-8">
+      <p className="text-[13px] font-medium text-gold">Rakazo</p>
+      <h1 className="mt-2 font-serif text-4xl tracking-tight">What should I take first?</h1>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        {title
+          ? `I stay on ${title}${ngo ? ` for ${ngo}` : ""}. I can read the folder, score mandates, draft a note, and search the source library.`
+          : "Attach a sanction or a folder. I can read it, score mandates, draft a note, and search the source library."}{" "}
+        Memory and routines stay in this browser.
+      </p>
+      <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+        {DEFAULT_ROUTINES.map((routine) => (
+          <li key={routine.id}>
+            <button
+              type="button"
+              className="h-full w-full cursor-pointer rounded-xl border border-line bg-panel px-3 py-2.5 text-left text-sm font-medium hover:bg-elevated"
+              onClick={() => onPick(routine.prompt)}
+            >
+              {routine.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

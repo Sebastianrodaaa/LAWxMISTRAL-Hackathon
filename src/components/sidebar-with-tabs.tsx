@@ -345,7 +345,7 @@ function MobileSidebar({
         <div className="flex h-full flex-col bg-sidebar">
           <div className="flex items-center gap-3 border-b border-sidebar-border p-5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-bold text-white">
-              A
+              {companyName.charAt(0)}
             </div>
             <span className="text-base font-semibold text-sidebar-foreground">{companyName}</span>
           </div>
@@ -419,7 +419,7 @@ function NewTabButton({ navItems, onAddTab }: { navItems: NavItem[]; onAddTab: (
 }
 
 export function SidebarWithTabs({
-  companyName = "Atrium",
+  companyName = "Bina.ai",
   navItems,
   renderContent,
   defaultNavId,
@@ -558,7 +558,7 @@ export function SidebarWithTabs({
               <div className={cn("flex h-[52px] items-center border-b border-sidebar-border px-4", isCollapsed ? "justify-center" : "justify-between")}>
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-bold text-white">
-                    A
+                    {companyName.charAt(0)}
                   </div>
                   {!isCollapsed ? <span className="truncate text-sm font-semibold tracking-tight">{companyName}</span> : null}
                 </div>
@@ -584,7 +584,7 @@ export function SidebarWithTabs({
                 />
               </div>
               <div className="flex h-[73px] items-center overflow-hidden border-t border-sidebar-border px-4">
-                {!isCollapsed ? footer : <div className="mx-auto h-8 w-8 rounded-full bg-sidebar-primary text-center text-sm leading-8 font-bold text-white">A</div>}
+                {!isCollapsed ? footer : <div className="mx-auto h-8 w-8 rounded-full bg-sidebar-primary text-center text-sm leading-8 font-bold text-white">{companyName.charAt(0)}</div>}
               </div>
             </motion.aside>
 

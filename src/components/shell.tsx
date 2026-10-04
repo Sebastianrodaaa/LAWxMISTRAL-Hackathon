@@ -24,7 +24,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="chrome sticky top-0 z-30">
         <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 md:px-6">
           <Link href="/" className="text-[1.35rem] leading-none font-semibold tracking-[-0.03em] text-paper">
-            Atrium
+            Bina.ai
           </Link>
           <nav className="flex flex-wrap items-center justify-end gap-2 text-sm" aria-label="Primary">
             <div className="flex items-center gap-0.5 rounded-full bg-elevated p-1">
@@ -43,7 +43,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </main>
       <footer className="border-t border-line">
         <p className="mx-auto max-w-6xl px-4 py-6 text-xs leading-relaxed text-faint md:px-6">
-          Atrium is a working demonstration for a funding read. It is not a law firm, not a broker-dealer, and not an offer to sell a security. Worksheet figures are not forecasts.
+          Bina.ai is a working demonstration for a funding read. It is not a law firm, not a broker-dealer, and not an offer to sell a security. Worksheet figures are not forecasts.
         </p>
       </footer>
     </div>

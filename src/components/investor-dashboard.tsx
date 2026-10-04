@@ -29,7 +29,7 @@ export function InvestorDashboard({ entryNav, matterId: entryMatter }: { entryNa
 
   return (
     <SidebarWithTabs
-      companyName="Atrium"
+      companyName="Bina.ai"
       storageKey="atrium-investor-tabs"
       navItems={navItems}
       mapNavId={investorNav}

@@ -13,10 +13,12 @@ export function CaseView({
   matterId,
   onBack,
   onInvestors,
+  onOpenInvestor,
 }: {
   matterId?: string;
   onBack?: () => void;
   onInvestors?: () => void;
+  onOpenInvestor?: (id: string) => void;
 }) {
   const params = useParams<{ id: string }>();
   const { getMatter, ready, interests, listMatter } = useStore();
@@ -102,7 +104,17 @@ export function CaseView({
               {matches.map((match) => (
                 <li key={match.fund.id} className="surface p-3">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm text-paper">{match.fund.name}</p>
+                    {onOpenInvestor ? (
+                      <button
+                        type="button"
+                        className="cursor-pointer text-left text-sm text-paper hover:text-gold"
+                        onClick={() => onOpenInvestor(match.fund.id)}
+                      >
+                        {match.fund.name}
+                      </button>
+                    ) : (
+                      <p className="text-sm text-paper">{match.fund.name}</p>
+                    )}
                     <p className="font-mono text-sm text-gold tabular-nums">{match.score}</p>
                   </div>
                   <p className="mt-1 text-xs text-faint">{match.fund.kind}</p>

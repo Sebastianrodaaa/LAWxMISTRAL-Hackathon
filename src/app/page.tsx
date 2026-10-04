@@ -16,7 +16,7 @@ export default function Home() {
           </h1>
           <div className="mt-6 h-0.5 w-10 rounded-full bg-gold" aria-hidden />
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            Atrium is for NGOs bringing class actions and for the hedge funds and litigation desks that finance them. An agent reads the folder and composes the deck. Capital runs a recovery model, a Rule 23 worksheet, and deep research before anyone takes a meeting.
+            Bina.ai is for NGOs bringing class actions and for the hedge funds and litigation desks that finance them. An agent reads the folder and composes the deck. Capital runs a recovery model, a Rule 23 worksheet, and deep research before anyone takes a meeting.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/desk" className={primaryLink}>

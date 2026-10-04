@@ -59,6 +59,14 @@ export type Matter = {
   updated: string;
 };
 
+export type FundProfile = {
+  who: string;
+  book: string;
+  looksFor: string;
+  passes: string;
+  read: string;
+};
+
 export type Fund = {
   id: string;
   name: string;
@@ -70,6 +78,7 @@ export type Fund = {
   tags: string[];
   aum: string;
   readTime: string;
+  profile: FundProfile;
 };
 
 export type Interest = {

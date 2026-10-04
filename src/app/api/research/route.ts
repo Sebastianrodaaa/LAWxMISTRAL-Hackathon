@@ -1,3 +1,4 @@
+import { ndjsonResponse } from "@/lib/chat-events";
 import { corpus, rankLibrary, stitchReading } from "@/lib/corpus";
 import { runHarness } from "@/lib/harness";
 import { deskWarning } from "@/lib/mistral";
@@ -17,23 +18,41 @@ export async function POST(request: Request) {
   const query = String(body.query || "").trim().slice(0, 400);
   if (!query) return Response.json({ error: "Ask a question first." }, { status: 400 });
 
-  const libraryHits = rankLibrary(query);
-  let webHits: Hit[] = [];
-  const tavilyKey = process.env.TAVILY_API_KEY;
-  if (tavilyKey) {
-    try {
-      webHits = await searchWeb(tavilyKey, query);
-    } catch {
-      webHits = [];
-    }
-  }
-
-  const hits = dedupe([...webHits, ...libraryHits]).slice(0, 8);
-  const shown = hits.length ? hits : corpus.slice(0, 3);
-  const live = webHits.length > 0;
-  const stitched = stitchReading(query, shown, live);
   const mistralKey = process.env.MISTRAL_API_KEY;
-  if (mistralKey) {
+
+  return ndjsonResponse(async (send) => {
+    send({ type: "status", label: "Reading the library" });
+    const libraryHits = rankLibrary(query);
+    let webHits: Hit[] = [];
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (tavilyKey) {
+      send({ type: "status", label: "Searching the live web" });
+      try {
+        webHits = await searchWeb(tavilyKey, query);
+      } catch {
+        webHits = [];
+      }
+    }
+    const hits = dedupe([...webHits, ...libraryHits]).slice(0, 8);
+    const shown = hits.length ? hits : corpus.slice(0, 3);
+    const live = webHits.length > 0;
+    const stitched = stitchReading(query, shown, live);
+    if (!mistralKey) {
+      for (const hit of shown) {
+        send({
+          type: "step",
+          step: {
+            tool: hit.origin === "web" ? "web" : "research",
+            label: hit.title,
+            detail: hit.publisher,
+            href: hit.url,
+          },
+        });
+      }
+      send({ type: "token", text: stitched });
+      send({ type: "done", source: "desk", text: stitched });
+      return;
+    }
     try {
       const harness = await runHarness({
         key: mistralKey,
@@ -47,36 +66,22 @@ export async function POST(request: Request) {
           origin: hit.origin,
           url: hit.url,
         })),
+        emit: send,
       });
-      return Response.json({
-        query,
-        synthesis: harness.answer,
-        hits: shown,
-        live,
+      send({
+        type: "done",
         source: "mistral",
+        model: harness.model,
+        text: harness.answer,
         reflection: harness.reflection,
         confidence: harness.confidence,
-        debate: harness.debate,
-        cached: harness.cached,
+        debate: harness.debate.map((round) => ({ round: round.round, critic: round.critic, verdict: round.verdict })),
+        citations: harness.citations,
       });
     } catch (error) {
-      return Response.json({
-        query,
-        synthesis: stitched,
-        hits: shown,
-        live,
-        source: "desk",
-        warning: deskWarning(error),
-      });
+      send({ type: "token", text: stitched });
+      send({ type: "done", source: "desk", text: stitched, warning: deskWarning(error) });
     }
-  }
-
-  return Response.json({
-    query,
-    synthesis: stitched,
-    hits: shown,
-    live,
-    source: "desk",
   });
 }
 

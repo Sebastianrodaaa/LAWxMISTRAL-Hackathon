@@ -1,3 +1,4 @@
+import { ndjsonResponse } from "@/lib/chat-events";
 import { rankLibrary, stitchReading } from "@/lib/corpus";
 import { runHarness } from "@/lib/harness";
 import {
@@ -44,8 +45,15 @@ export async function POST(request: Request) {
   const memory = memoryOf(record.memory);
   const ctx: ToolContext = { brief, lookup };
   const key = process.env.MISTRAL_API_KEY;
-  const desk = await runDesk(latest.content, ctx);
-  if (key) {
+
+  return ndjsonResponse(async (send) => {
+    send({ type: "status", label: "Reading the folder" });
+    const desk = await runDesk(latest.content, ctx, send);
+    if (!key) {
+      send({ type: "token", text: desk.text });
+      send({ type: "done", source: "desk", model: "desk", text: desk.text, steps: desk.steps, memories: desk.memories });
+      return;
+    }
     try {
       const model = resolveModel(typeof record.model === "string" ? record.model : "default");
       const harness = await runHarness({
@@ -66,44 +74,45 @@ export async function POST(request: Request) {
         ]
           .filter(Boolean)
           .join("\n"),
+        emit: send,
       });
-      return Response.json({
+      const steps = [
+        ...desk.steps,
+        {
+          tool: "scholar",
+          label: "Scholar",
+          detail: `${harness.citations.length} sources · confidence ${Math.round(harness.confidence * 100)}%`,
+        },
+        ...harness.debate.map((round) => ({
+          tool: "critic",
+          label: `Critic · round ${round.round}`,
+          detail: round.critic,
+        })),
+      ];
+      send({
+        type: "done",
         source: "mistral",
         model,
         text: harness.answer,
-        steps: [
-          ...desk.steps,
-          {
-            tool: "scholar",
-            label: "Scholar",
-            detail: `${harness.citations.length} sources · confidence ${Math.round(harness.confidence * 100)}%`,
-          },
-          ...harness.debate.map((round) => ({
-            tool: "critic",
-            label: `Critic · round ${round.round}`,
-            detail: round.critic,
-          })),
-        ],
+        steps,
         memories: desk.memories,
         reflection: harness.reflection,
         confidence: harness.confidence,
-        debate: harness.debate,
-        cached: harness.cached,
+        debate: harness.debate.map((round) => ({ round: round.round, critic: round.critic, verdict: round.verdict })),
+        citations: harness.citations,
       });
     } catch (error) {
-      return Response.json({
+      send({ type: "token", text: desk.text });
+      send({
+        type: "done",
         source: "desk",
         model: "desk",
+        text: desk.text,
         warning: mistralWarning(error),
-        ...desk,
+        steps: desk.steps,
+        memories: desk.memories,
       });
     }
-  }
-
-  return Response.json({
-    source: "desk",
-    model: "desk",
-    ...desk,
   });
 }
 

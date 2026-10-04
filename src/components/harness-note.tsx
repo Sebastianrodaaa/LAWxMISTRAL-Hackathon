@@ -8,10 +8,12 @@ export function HarnessNote({
   reflection,
   confidence,
   debate,
+  open = false,
 }: {
   reflection?: string;
   confidence?: number;
   debate?: HarnessDebate[];
+  open?: boolean;
 }) {
   const rounds = debate?.filter((round) => round.critic) ?? [];
   if (!reflection && typeof confidence !== "number" && rounds.length === 0) return null;
@@ -24,7 +26,7 @@ export function HarnessNote({
       ) : null}
       {reflection ? <p className="text-sm leading-relaxed text-muted">{reflection}</p> : null}
       {rounds.length ? (
-        <details className="text-sm">
+        <details className="text-sm" open={open || undefined}>
           <summary className="cursor-pointer text-[11px] font-medium text-gold">
             Scholar and critic · {rounds.length} round{rounds.length === 1 ? "" : "s"}
           </summary>
