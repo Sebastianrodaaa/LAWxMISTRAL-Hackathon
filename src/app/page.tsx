@@ -14,7 +14,7 @@ export default function Home() {
           <h1 className="mt-4 max-w-3xl font-serif text-5xl leading-[0.95] tracking-tight text-paper md:text-7xl">
             Point a folder at the desk. Leave with a pitch.
           </h1>
-          <div className="mt-6 h-px w-16 bg-gold" />
+          <div className="mt-6 h-0.5 w-10 rounded-full bg-gold" aria-hidden />
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
             Atrium is for NGOs bringing class actions and for the hedge funds and litigation desks that finance them. An agent reads the folder and composes the deck. Capital runs a recovery model, a Rule 23 worksheet, and deep research before anyone takes a meeting.
           </p>
@@ -28,7 +28,7 @@ export default function Home() {
           </div>
           <p className="mt-4 text-xs text-faint">No account. Drafts stay in this browser until you list them.</p>
         </div>
-        <aside className="border border-line bg-panel">
+        <aside className="surface">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-gold">On the book</span>
             <span className="font-mono text-[11px] text-faint">{library.length} matters</span>
@@ -52,22 +52,22 @@ export default function Home() {
 
       <section className="mx-auto max-w-6xl px-4 py-16 md:px-6">
         <Kicker n="02">How a matter moves</Kicker>
-        <ol className="mt-8 grid gap-8 md:grid-cols-3">
-          <li className="border-t border-line pt-4">
+        <ol className="mt-8 grid gap-3 md:grid-cols-3">
+          <li className="surface p-5">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">01</p>
             <h2 className="mt-3 font-serif text-3xl">The folder</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               NGOs drop pleadings, notices, expert notes, and a caption sheet. The agent inventories parties, the class, the theories, and every figure it can actually find.
             </p>
           </li>
-          <li className="border-t border-line pt-4">
+          <li className="surface p-5">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">02</p>
             <h2 className="mt-3 font-serif text-3xl">The deck</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               Ten slides, same order every time: harm, class, claims, evidence, damages, use of proceeds, the bargain, the risks, the ask. Missing facts stay missing.
             </p>
           </li>
-          <li className="border-t border-line pt-4">
+          <li className="surface p-5">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">03</p>
             <h2 className="mt-3 font-serif text-3xl">The book</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
@@ -88,7 +88,7 @@ export default function Home() {
               Score a matter against these desks
             </Link>
           </div>
-          <ul className="mt-8 divide-y divide-line border-y border-line">
+          <ul className="surface mt-8 divide-y divide-line">
             {funds.map((fund) => (
               <li key={fund.id} className="grid gap-2 py-4 md:grid-cols-[minmax(0,1.2fr)_auto_auto] md:items-baseline md:gap-8">
                 <div>

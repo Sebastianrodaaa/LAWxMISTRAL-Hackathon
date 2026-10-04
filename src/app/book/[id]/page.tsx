@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Diligence } from "@/components/diligence";
+import { InvestorDashboard } from "@/components/investor-dashboard";
 
-export const metadata: Metadata = { title: "Diligence" };
+export const metadata: Metadata = { title: "AI" };
 
-export default function Page() {
-  return <Diligence />;
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <InvestorDashboard entryNav="ai" matterId={id} />;
 }

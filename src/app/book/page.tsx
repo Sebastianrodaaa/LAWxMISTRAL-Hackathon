@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { DealBook } from "@/components/deal-book";
+import { InvestorDashboard } from "@/components/investor-dashboard";
 
-export const metadata: Metadata = { title: "The book" };
+export const metadata: Metadata = { title: "Investor desk" };
 
 export default function Page() {
-  return <DealBook />;
+  return <InvestorDashboard />;
 }

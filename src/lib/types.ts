@@ -80,6 +80,27 @@ export type Interest = {
   at: string;
 };
 
+export type Delivery = {
+  id: string;
+  matterId: string;
+  fundId: string;
+  at: string;
+};
+
+export type Sanction = {
+  id: string;
+  title: string;
+  authority: string;
+  program: string;
+  status: "Active";
+  issued: string;
+  designated: string;
+  summary: string;
+  measures: string[];
+  tags: string[];
+  files: DocketFile[];
+};
+
 export type Hit = {
   title: string;
   publisher: string;

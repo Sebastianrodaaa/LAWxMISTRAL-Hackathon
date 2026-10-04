@@ -1,84 +1,105 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState, type ReactNode } from "react";
 import { money } from "@/lib/format";
 import { library } from "@/lib/library";
 import { useStore } from "@/lib/store";
-import { Kicker, Tag, primaryLink } from "./ui";
+import type { Matter } from "@/lib/types";
 
-export function DeskHome() {
+const filters = ["All", "Drafts", "Book"] as const;
+type Filter = (typeof filters)[number];
+
+export function DeskHome({ onOpen }: { onOpen?: (id: string) => void }) {
   const { drafts } = useStore();
-  const unlisted = drafts.filter((matter) => !matter.shared);
-  const circulating = [...library, ...drafts.filter((matter) => matter.shared)];
+  const [filter, setFilter] = useState<Filter>("All");
+  const rows = useMemo(() => {
+    const unlisted = drafts.filter((matter) => !matter.shared);
+    const circulating = [...library, ...drafts.filter((matter) => matter.shared)];
+    if (filter === "Drafts") return unlisted;
+    if (filter === "Book") return circulating;
+    return [...unlisted, ...circulating];
+  }, [drafts, filter]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 md:px-6">
-      <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-        <div>
-          <Kicker n="01">NGO desk</Kicker>
-          <h1 className="mt-3 font-serif text-4xl tracking-tight md:text-5xl">Matters in the room.</h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">
-            A folder stays a draft until you list it. Capital on the book can already read the three matters below, and any draft you choose to circulate.
-          </p>
-        </div>
-        <Link href="/desk/new" className={primaryLink}>
-          New matter from a folder
-        </Link>
+    <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+      <div className="flex gap-1" role="tablist" aria-label="Pitch status">
+        {filters.map((option) => {
+          const active = option === filter;
+          return (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setFilter(option)}
+              className={`h-8 cursor-pointer rounded-full px-3 text-[13px] font-medium ${
+                active ? "bg-paper text-white" : "text-muted hover:bg-elevated"
+              }`}
+            >
+              {option}
+            </button>
+          );
+        })}
       </div>
-
-      <section className="mt-12">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">Your drafts</h2>
-        {unlisted.length ? (
-          <ul className="mt-4 grid gap-3 md:grid-cols-2">
-            {unlisted.map((matter) => (
-              <li key={matter.id}>
-                <Link
-                  href={`/desk/cases/${matter.id}`}
-                  className="block cursor-pointer border border-line p-4 transition-colors duration-200 hover:border-gold"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-serif text-2xl">{matter.title}</p>
-                    <Tag>{matter.shared ? "On the book" : "Draft"}</Tag>
-                  </div>
-                  <p className="mt-2 text-sm text-muted">{matter.caption}</p>
-                  <p className="mt-3 font-mono text-sm text-gold tabular-nums">
-                    {money(matter.assumptions.fundingAsk)}
-                  </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 border border-dashed border-line p-5 text-sm leading-relaxed text-muted">
-            {drafts.length
-              ? "Every folder you have run is already on the book."
-              : "Nothing from your browser yet. Load the Riverbend sample, or drop your own caption sheet and exhibits."}
-          </p>
-        )}
-      </section>
-
-      <section className="mt-12">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-faint">On the book</h2>
-        <ul className="mt-4 divide-y divide-line border-y border-line">
-          {circulating.map((matter) => (
+      {rows.length ? (
+        <ul className="mt-4 divide-y divide-line">
+          {rows.map((matter) => (
             <li key={matter.id}>
-              <Link
+              <MatterLink
                 href={`/desk/cases/${matter.id}`}
-                className="flex cursor-pointer flex-col gap-2 py-4 transition-colors duration-200 hover:text-gold md:flex-row md:items-baseline md:justify-between"
+                onClick={onOpen ? () => onOpen(matter.id) : undefined}
+                className="block w-full cursor-pointer py-5 text-left"
               >
-                <div>
-                  <p className="font-serif text-2xl text-paper">{matter.title}</p>
-                  <p className="text-sm text-muted">
-                    {matter.ngo} · {matter.jurisdiction}
-                    {matter.origin === "desk" ? " · Your listing" : ""}
-                  </p>
-                </div>
-                <p className="font-mono text-sm tabular-nums text-gold">{money(matter.assumptions.fundingAsk)}</p>
-              </Link>
+                <PitchRow matter={matter} />
+              </MatterLink>
             </li>
           ))}
         </ul>
-      </section>
+      ) : (
+        <p className="mt-6 text-sm text-muted">No drafts.</p>
+      )}
     </div>
+  );
+}
+
+function PitchRow({ matter }: { matter: Matter }) {
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="font-serif text-xl text-paper">{matter.title}</h2>
+        <p className="shrink-0 text-[13px] tabular-nums text-muted">{money(matter.assumptions.fundingAsk)}</p>
+      </div>
+      <p className="mt-1 text-[13px] text-faint">
+        {matter.ngo} · {matter.jurisdiction}
+        {matter.shared ? "" : " · Draft"}
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{matter.summary}</p>
+    </>
+  );
+}
+
+function MatterLink({
+  href,
+  onClick,
+  className,
+  children,
+}: {
+  href: string;
+  onClick?: () => void;
+  className: string;
+  children: ReactNode;
+}) {
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
   );
 }

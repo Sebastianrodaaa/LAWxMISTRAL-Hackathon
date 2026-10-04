@@ -10,14 +10,15 @@ import { ResearchPanel } from "@/components/research-panel";
 import { money } from "@/lib/format";
 import { fundById } from "@/lib/funds";
 import { useStore } from "@/lib/store";
-import { Kicker, Tag } from "./ui";
+import { SegmentedControl } from "@/components/segmented";
+import { Kicker, Tag, primaryButton } from "./ui";
 
 const tabs = ["Recovery", "Rule 23", "Research", "Folder"] as const;
 
-export function Diligence() {
+export function Diligence({ matterId, onBack }: { matterId?: string; onBack?: () => void }) {
   const params = useParams<{ id: string }>();
   const { getMatter, ready, fundId, signalInterest, interests } = useStore();
-  const matter = getMatter(params.id);
+  const matter = getMatter(matterId || params.id);
   const [tab, setTab] = useState<(typeof tabs)[number]>("Recovery");
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
@@ -43,9 +44,15 @@ export function Diligence() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6">
-      <Link href="/book" className="text-sm text-faint hover:text-gold">
-        The book
-      </Link>
+      {onBack ? (
+        <button type="button" onClick={onBack} className="cursor-pointer text-sm text-faint hover:text-gold">
+          The book
+        </button>
+      ) : (
+        <Link href="/book" className="text-sm text-faint hover:text-gold">
+          The book
+        </Link>
+      )}
       <div className="mt-4 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
         <div>
           <Kicker>{matter.jurisdiction}</Kicker>
@@ -68,23 +75,13 @@ export function Diligence() {
 
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <Deck slides={matter.slides} />
-        <section className="border border-line bg-panel p-4 md:p-5">
-          <div className="flex flex-wrap gap-1 border-b border-line pb-3" role="tablist" aria-label="Analyst desk">
-            {tabs.map((item) => (
-              <button
-                key={item}
-                type="button"
-                role="tab"
-                aria-selected={tab === item}
-                onClick={() => setTab(item)}
-                className={`cursor-pointer px-2.5 py-1.5 text-sm transition-colors duration-200 ${
-                  tab === item ? "text-gold" : "text-muted hover:text-paper"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+        <section className="surface p-4 md:p-5">
+          <SegmentedControl
+            label="Analyst desk"
+            value={tab}
+            onValueChange={(next) => setTab(next as (typeof tabs)[number])}
+            options={tabs.map((item) => ({ value: item, label: item }))}
+          />
           <div className="pt-4" role="tabpanel">
             {tab === "Recovery" ? <RecoveryDesk key={matter.id} matter={matter} /> : null}
             {tab === "Rule 23" ? (
@@ -104,8 +101,8 @@ export function Diligence() {
                         </p>
                         <p className="font-mono text-sm tabular-nums text-gold">{factor.score}</p>
                       </div>
-                      <div className="mt-2 h-1 bg-ink">
-                        <div className="h-full bg-gold" style={{ width: `${factor.score}%` }} />
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-elevated">
+                        <div className="h-full rounded-full bg-gold" style={{ width: `${factor.score}%` }} />
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-muted">{factor.note}</p>
                     </li>
@@ -131,7 +128,7 @@ export function Diligence() {
       </div>
 
       <form
-        className="mt-8 border border-line p-4 md:p-5"
+        className="surface mt-8 p-4 md:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           signalInterest(matter.id, note.trim());
@@ -148,13 +145,13 @@ export function Diligence() {
             value={note}
             onChange={(event) => setNote(event.target.value)}
             rows={3}
-            className="w-full border border-line bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-gold"
+            className="w-full rounded-xl border border-transparent bg-elevated px-3 py-2 text-sm text-paper outline-none focus:border-gold"
             placeholder="What you would need before a call."
           />
         </label>
         <button
           type="submit"
-          className="mt-3 h-10 cursor-pointer bg-gold px-4 text-sm font-bold text-ink transition-colors duration-200 hover:bg-gold-2"
+          className={`mt-3 ${primaryButton}`}
         >
           {recorded ? "Update interest" : "Record interest"}
         </button>

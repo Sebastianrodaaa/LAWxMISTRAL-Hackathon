@@ -9,10 +9,18 @@ import { rankFunds } from "@/lib/match";
 import { useStore } from "@/lib/store";
 import { Kicker, Tag, primaryLink, secondaryLink } from "./ui";
 
-export function CaseView() {
+export function CaseView({
+  matterId,
+  onBack,
+  onInvestors,
+}: {
+  matterId?: string;
+  onBack?: () => void;
+  onInvestors?: () => void;
+}) {
   const params = useParams<{ id: string }>();
   const { getMatter, ready, interests, listMatter } = useStore();
-  const matter = getMatter(params.id);
+  const matter = getMatter(matterId || params.id);
 
   if (!matter && !ready) {
     return <p className="px-6 py-16 text-muted">Opening the matter…</p>;
@@ -33,9 +41,15 @@ export function CaseView() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6">
-      <Link href="/desk" className="text-sm text-faint hover:text-gold">
-        Matters
-      </Link>
+      {onBack ? (
+        <button type="button" onClick={onBack} className="cursor-pointer text-sm text-faint hover:text-gold">
+          Matters
+        </button>
+      ) : (
+        <Link href="/desk" className="text-sm text-faint hover:text-gold">
+          Matters
+        </Link>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Tag>{matter.origin === "desk" ? (matter.shared ? "On the book" : "Draft") : "Circulating"}</Tag>
         <Tag>{matter.stage}</Tag>
@@ -55,7 +69,7 @@ export function CaseView() {
           ) : null}
         </div>
         <aside className="space-y-6">
-          <div className="border border-line p-4">
+          <div className="surface p-4">
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Ask</p>
             <p className="mt-1 font-serif text-4xl text-gold tabular-nums">
               {money(matter.assumptions.fundingAsk)}
@@ -71,16 +85,22 @@ export function CaseView() {
               <Link href={`/book/${matter.id}`} className={secondaryLink}>
                 Open the capital worksheet
               </Link>
-              <Link href={`/desk/capital?matter=${matter.id}`} className={secondaryLink}>
-                See who fits
-              </Link>
+              {onInvestors ? (
+                <button type="button" onClick={onInvestors} className={secondaryLink}>
+                  See who fits
+                </button>
+              ) : (
+                <Link href={`/desk/capital?matter=${matter.id}`} className={secondaryLink}>
+                  See who fits
+                </Link>
+              )}
             </div>
           </div>
           <div>
             <Kicker>Closest mandates</Kicker>
             <ul className="mt-3 space-y-3">
               {matches.map((match) => (
-                <li key={match.fund.id} className="border border-line p-3">
+                <li key={match.fund.id} className="surface p-3">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="text-sm text-paper">{match.fund.name}</p>
                     <p className="font-mono text-sm text-gold tabular-nums">{match.score}</p>
@@ -100,7 +120,7 @@ export function CaseView() {
             {notes.length ? (
               <ul className="mt-3 space-y-3">
                 {notes.map((item) => (
-                  <li key={item.id} className="border border-line p-3">
+                  <li key={item.id} className="surface p-3">
                     <p className="text-sm text-paper">{fundById(item.fundId).name}</p>
                     {item.note ? <p className="mt-1 text-sm leading-relaxed text-muted">{item.note}</p> : null}
                     <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">

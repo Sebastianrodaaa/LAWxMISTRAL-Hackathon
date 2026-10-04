@@ -9,17 +9,18 @@ import {
 } from "react";
 import { fundById } from "./funds";
 import { library } from "./library";
-import type { Interest, Matter } from "./types";
+import type { Delivery, Interest, Matter } from "./types";
 
 const KEY = "atrium-v1";
 
 type Persisted = {
   drafts: Matter[];
   interests: Interest[];
+  deliveries: Delivery[];
   fundId: string;
 };
 
-const EMPTY: Persisted = { drafts: [], interests: [], fundId: "northline" };
+const EMPTY: Persisted = { drafts: [], interests: [], deliveries: [], fundId: "northline" };
 
 let memory: Persisted = EMPTY;
 const listeners = new Set<() => void>();
@@ -50,6 +51,7 @@ function write(next: Persisted) {
 type Store = {
   drafts: Matter[];
   interests: Interest[];
+  deliveries: Delivery[];
   fundId: string;
   fundName: string;
   book: Matter[];
@@ -57,6 +59,7 @@ type Store = {
   setFundId: (id: string) => void;
   addDraft: (matter: Matter) => void;
   listMatter: (id: string) => void;
+  sendToInvestors: (matterId: string, fundIds: string[]) => void;
   signalInterest: (matterId: string, note: string) => void;
 };
 
@@ -66,11 +69,12 @@ export function Providers({ children }: { children: ReactNode }) {
   const persisted = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const value = useMemo<Store>(() => {
-    const { drafts, interests, fundId } = persisted;
+    const { drafts, interests, deliveries, fundId } = persisted;
     const book = [...library, ...drafts.filter((matter) => matter.shared)];
     return {
       drafts,
       interests,
+      deliveries,
       fundId,
       fundName: fundById(fundId).name,
       book,
@@ -92,6 +96,29 @@ export function Providers({ children }: { children: ReactNode }) {
           drafts: current.drafts.map((matter) =>
             matter.id === id ? { ...matter, shared: true } : matter,
           ),
+        });
+      },
+      sendToInvestors: (matterId: string, fundIds: string[]) => {
+        const current = getSnapshot();
+        const at = new Date().toISOString();
+        const ids = [...new Set(fundIds)].slice(0, 6);
+        const added: Delivery[] = ids.map((fundId) => ({
+          id: `${matterId}-${fundId}`,
+          matterId,
+          fundId,
+          at,
+        }));
+        write({
+          ...current,
+          drafts: current.drafts.map((matter) =>
+            matter.id === matterId ? { ...matter, shared: true } : matter,
+          ),
+          deliveries: [
+            ...added,
+            ...current.deliveries.filter(
+              (item) => item.matterId !== matterId || !ids.includes(item.fundId),
+            ),
+          ],
         });
       },
       signalInterest: (matterId: string, note: string) => {
@@ -138,6 +165,7 @@ function readPersisted(): Persisted {
     return {
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
       interests: Array.isArray(parsed.interests) ? parsed.interests : [],
+      deliveries: Array.isArray(parsed.deliveries) ? parsed.deliveries : [],
       fundId: typeof parsed.fundId === "string" ? parsed.fundId : "northline",
     };
   } catch {

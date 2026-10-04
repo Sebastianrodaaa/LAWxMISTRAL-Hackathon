@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { DeskHome } from "@/components/desk-home";
+import { NgoDashboard } from "@/components/ngo-dashboard";
 
-export const metadata: Metadata = { title: "Desk" };
+export const metadata: Metadata = { title: "NGO desk" };
 
 export default function Page() {
-  return <DeskHome />;
+  return <NgoDashboard />;
 }

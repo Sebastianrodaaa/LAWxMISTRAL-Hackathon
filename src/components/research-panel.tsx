@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { Hit } from "@/lib/types";
-import { Field, inputClass } from "./ui";
+import { HarnessNote, type HarnessDebate } from "./harness-note";
+import { Field, inputClass, primaryButton } from "./ui";
 
 const suggestions = [
   "PFAS medical monitoring and predominance",
@@ -16,6 +17,10 @@ export function ResearchPanel({ seed }: { seed?: string }) {
   const [synthesis, setSynthesis] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [live, setLive] = useState(false);
+  const [reflection, setReflection] = useState("");
+  const [confidence, setConfidence] = useState<number | undefined>(undefined);
+  const [debate, setDebate] = useState<HarnessDebate[]>([]);
+  const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -25,6 +30,10 @@ export function ResearchPanel({ seed }: { seed?: string }) {
     setQuery(asked);
     setPending(true);
     setError("");
+    setWarning("");
+    setReflection("");
+    setConfidence(undefined);
+    setDebate([]);
     try {
       const response = await fetch("/api/research", {
         method: "POST",
@@ -36,6 +45,10 @@ export function ResearchPanel({ seed }: { seed?: string }) {
         synthesis?: string;
         hits?: Hit[];
         live?: boolean;
+        warning?: string;
+        reflection?: string;
+        confidence?: number;
+        debate?: HarnessDebate[];
       };
       if (!response.ok) {
         setError(payload.error || "Research did not run.");
@@ -44,6 +57,10 @@ export function ResearchPanel({ seed }: { seed?: string }) {
       setSynthesis(payload.synthesis || "");
       setHits(payload.hits || []);
       setLive(Boolean(payload.live));
+      setWarning(payload.warning || "");
+      setReflection(payload.reflection || "");
+      setConfidence(typeof payload.confidence === "number" ? payload.confidence : undefined);
+      setDebate(payload.debate || []);
     } catch {
       setError("Research did not run. Check the connection and try again.");
     } finally {
@@ -70,7 +87,7 @@ export function ResearchPanel({ seed }: { seed?: string }) {
         <button
           type="submit"
           disabled={pending || !query.trim()}
-          className="mt-3 h-10 cursor-pointer bg-gold px-4 text-sm font-bold text-ink transition-colors duration-200 hover:bg-gold-2 disabled:cursor-not-allowed disabled:opacity-40"
+          className={`mt-3 ${primaryButton}`}
         >
           {pending ? "Reading sources…" : "Run research"}
         </button>
@@ -81,7 +98,7 @@ export function ResearchPanel({ seed }: { seed?: string }) {
             key={item}
             type="button"
             onClick={() => void run(item)}
-            className="cursor-pointer border border-line px-2.5 py-1 text-left text-xs text-muted transition-colors duration-200 hover:border-gold hover:text-paper"
+            className="cursor-pointer rounded-full bg-elevated px-3 py-1.5 text-left text-xs text-muted transition-colors duration-200 hover:text-paper"
           >
             {item}
           </button>
@@ -89,21 +106,23 @@ export function ResearchPanel({ seed }: { seed?: string }) {
       </div>
       {error ? <p className="text-sm text-warn">{error}</p> : null}
       {synthesis ? (
-        <div className="border border-line bg-panel p-4" aria-live="polite">
+        <div className="surface p-4" aria-live="polite">
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-gold">
             {live ? "Note · library and live web" : "Note · source library"}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-paper">{synthesis}</p>
+          {warning ? <p className="mt-2 text-sm text-warn">{warning}</p> : null}
+          <HarnessNote reflection={reflection} confidence={confidence} debate={debate} />
         </div>
       ) : (
         <p className="text-sm leading-relaxed text-muted">
-          Research reads the Atrium source library. If the server has a Tavily key, it also searches the live web and labels those hits separately. Mistral writes the note when a key is present. Without either key, you still get a stitched reading of the library.
+          Research reads the Atrium source library, then a scholar and a critic check the note against those sources. If the server has a Tavily key, live web hits are labeled separately. Without a Mistral key, you still get a stitched reading of the library.
         </p>
       )}
       {hits.length ? (
         <ul className="space-y-3">
           {hits.map((hit) => (
-            <li key={`${hit.origin}-${hit.title}`} className="border border-line p-4">
+            <li key={`${hit.origin}-${hit.title}`} className="surface p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gold">
                   {hit.origin === "web" ? "Live web" : "Library"}

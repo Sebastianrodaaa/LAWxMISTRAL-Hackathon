@@ -1,55 +1,99 @@
 @import "tailwindcss";
 
+/* Light materials: gray page, white cards, gray fills. Blue is #0071E3 so
+   both white-on-blue buttons and blue text on white meet WCAG AA. */
 :root {
-  --ink: #0c1118;
-  --panel: #141b26;
-  --line: rgba(232, 220, 196, 0.16);
-  --gold: #d4b483;
-  --gold-2: #f3e6cf;
-  --paper: #f4efe6;
-  --muted: #c5cdd8;
-  --faint: #93a0b3;
-  --warn: #e0a36a;
+  --ink: #f5f5f7;
+  --panel: #ffffff;
+  --elevated: #e5e5ea;
+  --hover: #d1d1d6;
+  --line: rgba(60, 60, 67, 0.18);
+  --gold: #0071e3;
+  --gold-2: #0062c7;
+  --fill: #0071e3;
+  --fill-2: #0062c7;
+  --paper: #1d1d1f;
+  --muted: #424245;
+  --faint: #6e6e73;
+  --warn: #9a3412;
   --background: var(--ink);
   --foreground: var(--paper);
+  /* SF Pro via the system font, then Helvetica Neue and Helvetica. */
+  --apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 @theme inline {
   --color-ink: var(--ink);
   --color-panel: var(--panel);
+  --color-elevated: var(--elevated);
+  --color-hover: var(--hover);
   --color-line: var(--line);
   --color-gold: var(--gold);
   --color-gold-2: var(--gold-2);
+  --color-fill: var(--fill);
+  --color-fill-2: var(--fill-2);
   --color-paper: var(--paper);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-warn: var(--warn);
-  --color-background: var(--background);
+  --color-background: #ffffff;
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-lato);
-  --font-serif: var(--font-eb);
-  --font-mono: var(--font-plex);
+  --color-muted-foreground: var(--faint);
+  --color-popover: #ffffff;
+  --color-popover-foreground: var(--paper);
+  --color-accent: var(--elevated);
+  --color-accent-foreground: var(--paper);
+  --color-border: var(--line);
+  --color-sidebar: #f5f5f7;
+  --color-sidebar-foreground: var(--paper);
+  --color-sidebar-accent: #e5e5ea;
+  --color-sidebar-accent-foreground: var(--paper);
+  --color-sidebar-border: var(--line);
+  --color-sidebar-primary: var(--fill);
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-ring: var(--fill);
+  --color-card: #ffffff;
+  --color-card-foreground: var(--paper);
+  --color-ring: var(--fill);
+  --animate-collapsible-down: collapsible-down 200ms ease-out;
+  --animate-collapsible-up: collapsible-up 200ms ease-out;
+  --font-sans: var(--apple);
+  --font-serif: var(--apple);
+  --font-mono: var(--apple);
 }
 
 body {
   background: var(--ink);
   color: var(--paper);
-  font-family: var(--font-lato), "Lato", sans-serif;
+  font-family: var(--apple);
   font-optical-sizing: auto;
 }
 
+/* Display sizes tighten; body stays at the system font's own tracking. */
 .font-serif {
-  font-optical-sizing: auto;
+  font-weight: 600;
   letter-spacing: -0.022em;
+  font-optical-sizing: auto;
+}
+
+h1.font-serif {
+  letter-spacing: -0.03em;
 }
 
 .chrome {
-  background: rgba(12, 17, 24, 0.72);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  backdrop-filter: blur(22px) saturate(160%);
+  background: rgba(245, 245, 247, 0.8);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
   box-shadow:
-    inset 0 1px 0 rgba(243, 230, 207, 0.1),
-    inset 0 -1px 0 rgba(232, 220, 196, 0.14);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.surface {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 button,
@@ -63,12 +107,12 @@ a:active {
 }
 
 ::selection {
-  background: #d4b483;
-  color: #0c1118;
+  background: #0071e3;
+  color: #ffffff;
 }
 
 :focus-visible {
-  outline: 2px solid #d4b483;
+  outline: 2px solid #0071e3;
   outline-offset: 3px;
 }
 
@@ -80,8 +124,63 @@ textarea {
   scroll-margin-top: 5rem;
 }
 
+@keyframes shimmer-text {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 input[type="range"] {
-  accent-color: #d4b483;
+  accent-color: #0071e3;
   height: 1.75rem;
   cursor: pointer;
 }
@@ -108,7 +207,7 @@ input[type="range"] {
 
 @media (prefers-reduced-transparency: reduce) {
   .chrome {
-    background: #0c1118;
+    background: #f5f5f7;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

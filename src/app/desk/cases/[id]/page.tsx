@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { CaseView } from "@/components/case-view";
+import { NgoDashboard } from "@/components/ngo-dashboard";
 
 export const metadata: Metadata = { title: "Matter" };
 
-export default function Page() {
-  return <CaseView />;
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <NgoDashboard entryNav="pitches" matterId={id} />;
 }

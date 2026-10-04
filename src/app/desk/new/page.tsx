@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { NewMatter } from "@/components/new-matter";
+import { NgoDashboard } from "@/components/ngo-dashboard";
 
-export const metadata: Metadata = { title: "New folder" };
+export const metadata: Metadata = { title: "Generate" };
 
 export default function Page() {
-  return <NewMatter />;
+  return <NgoDashboard entryNav="generate" />;
 }

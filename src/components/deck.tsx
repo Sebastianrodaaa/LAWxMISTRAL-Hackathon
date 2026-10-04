@@ -32,7 +32,7 @@ export function Deck({ slides }: { slides: Slide[] }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target?.closest("input, textarea, select, [role=tablist], [role=radiogroup]")) return;
       if (event.key === "ArrowRight") goRef.current(1);
       if (event.key === "ArrowLeft") goRef.current(-1);
     };
@@ -161,7 +161,7 @@ export function Deck({ slides }: { slides: Slide[] }) {
     <section aria-label="Pitch deck">
       <div
         ref={frameRef}
-        className="cursor-grab touch-pan-y overflow-hidden border border-line bg-panel select-none active:cursor-grabbing"
+        className="surface cursor-grab touch-pan-y select-none active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={finishDrag}
@@ -192,7 +192,7 @@ export function Deck({ slides }: { slides: Slide[] }) {
             type="button"
             onClick={() => go(-1)}
             disabled={index === 0}
-            className="h-11 cursor-pointer border border-line px-3 text-sm text-paper transition-colors duration-200 hover:border-gold disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-11 cursor-pointer rounded-xl bg-elevated px-3 text-sm font-medium text-paper transition-colors duration-200 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
@@ -200,7 +200,7 @@ export function Deck({ slides }: { slides: Slide[] }) {
             type="button"
             onClick={() => go(1)}
             disabled={index === slides.length - 1}
-            className="h-11 cursor-pointer border border-line px-3 text-sm text-paper transition-colors duration-200 hover:border-gold disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-11 cursor-pointer rounded-xl bg-elevated px-3 text-sm font-medium text-paper transition-colors duration-200 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>

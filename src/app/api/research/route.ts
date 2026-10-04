@@ -1,5 +1,10 @@
 import { corpus, rankLibrary, stitchReading } from "@/lib/corpus";
+import { runHarness } from "@/lib/harness";
+import { deskWarning } from "@/lib/mistral";
+import { resolveModel } from "@/lib/rakazo";
 import type { Hit } from "@/lib/types";
+
+export const maxDuration = 90;
 
 export async function POST(request: Request) {
   let body: { query?: string };
@@ -24,23 +29,54 @@ export async function POST(request: Request) {
   }
 
   const hits = dedupe([...webHits, ...libraryHits]).slice(0, 8);
+  const shown = hits.length ? hits : corpus.slice(0, 3);
   const live = webHits.length > 0;
-  let synthesis = stitchReading(query, hits.length ? hits : corpus.slice(0, 3), live);
+  const stitched = stitchReading(query, shown, live);
   const mistralKey = process.env.MISTRAL_API_KEY;
-  if (mistralKey && hits.length) {
+  if (mistralKey) {
     try {
-      const rewritten = await synthesize(mistralKey, query, hits, live);
-      if (rewritten) synthesis = rewritten;
-    } catch {
-      // Keep the stitched reading.
+      const harness = await runHarness({
+        key: mistralKey,
+        model: resolveModel("default"),
+        task: "research",
+        query,
+        sources: shown.map((hit) => ({
+          title: hit.title,
+          excerpt: hit.excerpt,
+          publisher: hit.publisher,
+          origin: hit.origin,
+          url: hit.url,
+        })),
+      });
+      return Response.json({
+        query,
+        synthesis: harness.answer,
+        hits: shown,
+        live,
+        source: "mistral",
+        reflection: harness.reflection,
+        confidence: harness.confidence,
+        debate: harness.debate,
+        cached: harness.cached,
+      });
+    } catch (error) {
+      return Response.json({
+        query,
+        synthesis: stitched,
+        hits: shown,
+        live,
+        source: "desk",
+        warning: deskWarning(error),
+      });
     }
   }
 
   return Response.json({
     query,
-    synthesis,
-    hits: hits.length ? hits : corpus.slice(0, 3),
+    synthesis: stitched,
+    hits: shown,
     live,
+    source: "desk",
   });
 }
 
@@ -68,50 +104,6 @@ async function searchWeb(key: string, query: string): Promise<Hit[]> {
     excerpt: (result.content || "").slice(0, 520),
     origin: "web" as const,
   }));
-}
-
-async function synthesize(key: string, query: string, hits: Hit[], live: boolean) {
-  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-    method: "POST",
-    signal: AbortSignal.timeout(28000),
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.MISTRAL_MODEL || "mistral-small-latest",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You write research notes for a litigation-finance desk. Use only the sources provided. Do not add cases, numbers, or citations that are not in those sources. Two short paragraphs. Say this is not a legal opinion and not a recommendation to fund. Return JSON {\"synthesis\":\"...\"}.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            query,
-            liveWebIncluded: live,
-            sources: hits.map((hit) => ({
-              title: hit.title,
-              publisher: hit.publisher,
-              origin: hit.origin,
-              excerpt: hit.excerpt,
-            })),
-          }),
-        },
-      ],
-    }),
-  });
-  if (!response.ok) return null;
-  const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return null;
-  const parsed = JSON.parse(content) as { synthesis?: unknown };
-  return typeof parsed.synthesis === "string" ? parsed.synthesis.slice(0, 1800) : null;
 }
 
 function domainOf(url?: string) {

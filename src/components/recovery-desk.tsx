@@ -26,7 +26,7 @@ export function RecoveryDesk({ matter }: { matter: Matter }) {
         <Bar label="Base" value={result.base.expected} max={maxBar} />
         <Bar label="High" value={result.high.expected} max={maxBar} />
       </div>
-      <dl className="grid grid-cols-2 gap-px border border-line bg-line text-sm">
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line text-sm">
         <Fact label="Participating" value={`${people(base.participants)} ${input.classUnit}`} />
         <Fact label="Gross recovery" value={money(base.gross)} />
         <Fact label="After counsel" value={money(base.afterCounsel)} />
@@ -146,8 +146,8 @@ function Bar({ label, value, max }: { label: string; value: number; max: number 
         <span className="text-faint">{label}</span>
         <span className="text-paper tabular-nums">{money(value)}</span>
       </div>
-      <div className="h-1.5 bg-ink">
-        <div className="h-full bg-gold" style={{ width: `${width}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-elevated">
+        <div className="h-full rounded-full bg-gold" style={{ width: `${width}%` }} />
       </div>
     </div>
   );
