@@ -6,12 +6,13 @@ import { buildMatter } from "@/lib/build";
 import { library } from "@/lib/library";
 import { sanctionById } from "@/lib/sanctions";
 import { AgentActivity } from "@/components/agent-activity";
+import { AgentOutput } from "@/components/agent-output";
 import { addDroppedFiles, AttachmentChips, ChatAttach, documentsFromAttachments, type ChatAttachment } from "@/components/chat-attach";
 import { ChatProse } from "@/components/chat-prose";
 import type { ChatEvent } from "@/lib/chat-events";
 import { readChat } from "@/lib/chat-stream";
 import { AGENT_MODELS, type MatterBrief, type RakazoMessage } from "@/lib/rakazo-types";
-import { DEFAULT_ROUTINES, freshThread, setAgentRun, updateRakazo, useRakazoDesk } from "@/lib/rakazo-desk";
+import { freshThread, setAgentRun, updateRakazo, useRakazoDesk } from "@/lib/rakazo-desk";
 import { useStore } from "@/lib/store";
 import type { DocketFile, Matter } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,7 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
     const reading = conversationMatter(matter, pending);
     if ((!text && !pending.length) || busy || !reading || !thread) return;
     setBusy(true);
+    const started = Date.now();
     setAgentRun({ running: true, prompt: text.slice(0, 80) });
     setDraft("");
     if (pending.length) setAttached([]);
@@ -150,6 +152,7 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
         confidence: data.confidence,
         debate: data.debate ?? paint.debate,
         citations: data.citations ?? paint.citations,
+        elapsedMs: Date.now() - started,
       };
       setLive(null);
       setFocusId(assistant.id);
@@ -231,8 +234,8 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className={`hidden shrink-0 flex-col border-x border-[#c6c6c8] bg-ink md:flex ${chatsOpen ? "w-56" : "w-12"}`}>
-          <div className={`flex items-center gap-1 border-b border-[#c6c6c8] ${chatsOpen ? "p-2" : "justify-center p-1.5"}`}>
+        <aside className={`hidden shrink-0 flex-col bg-ink md:flex ${chatsOpen ? "w-56" : "w-12"}`}>
+          <div className={`flex items-center gap-1 ${chatsOpen ? "p-2" : "justify-center p-1.5"}`}>
             {chatsOpen ? (
               <button
                 type="button"
@@ -257,7 +260,7 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
             </button>
           </div>
           {chatsOpen ? (
-          <ul className="min-h-0 flex-1 space-y-1 overflow-auto px-2 pb-2" aria-label="Conversations">
+          <ul className="min-h-0 flex-1 space-y-1 overflow-auto border-x border-[#c6c6c8] px-2 pb-2" aria-label="Conversations">
             {desk.threads.map((item) => {
               const active = item.id === thread.id;
               const matterTitle = sanctionFromThread(item.matterId)?.title ?? matters.find((row) => row.id === item.matterId)?.title;
@@ -286,9 +289,6 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div ref={logRef} className="min-h-0 flex-1 overflow-auto px-4 py-4" role="log" aria-live="polite" aria-relevant="additions">
-            {thread.messages.length === 0 && !live ? (
-              <EmptyState title={subject?.title} ngo={subject?.ngo} onPick={(prompt) => void send(prompt)} />
-            ) : (
             <ol className="mx-auto flex max-w-3xl flex-col gap-5">
                 {thread.messages.map((message) => (
                   <li key={message.id}>
@@ -308,7 +308,9 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
                     ) : (
                       <article>
                         <div className="text-left" onClick={() => setFocusId(message.id)}>
-                          <ChatProse text={message.text} citations={message.citations} />
+                          <AgentOutput steps={message.steps} citations={message.citations} elapsedMs={message.elapsedMs}>
+                            <ChatProse text={message.text} citations={message.citations} />
+                          </AgentOutput>
                         </div>
                       </article>
                     )}
@@ -317,15 +319,13 @@ export function NgoAgent({ matterId }: { matterId?: string; onMatter: (id: strin
                 {live ? (
                   <li>
                     <article aria-live="polite">
-                      {live.status ? (
-                        <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-gold uppercase">{live.status}</p>
-                      ) : null}
-                      <ChatProse text={live.text} citations={live.citations} streaming />
+                      <AgentOutput running status={live.status} steps={live.steps} citations={live.citations}>
+                        <ChatProse text={live.text} citations={live.citations} streaming />
+                      </AgentOutput>
                     </article>
                   </li>
                 ) : null}
               </ol>
-            )}
           </div>
           <form
             className="px-3 pt-2 pb-3"
@@ -650,33 +650,5 @@ function ModelPicker({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function EmptyState({ title, ngo, onPick }: { title?: string; ngo?: string; onPick: (prompt: string) => void }) {
-  return (
-    <div className="mx-auto flex h-full max-w-lg flex-col justify-center py-8">
-      <p className="text-[13px] font-medium text-gold">Rakazo</p>
-      <h1 className="mt-2 font-serif text-4xl tracking-tight">What should I take first?</h1>
-      <p className="mt-3 text-sm leading-relaxed text-muted">
-        {title
-          ? `I stay on ${title}${ngo ? ` for ${ngo}` : ""}. I can read the folder, score mandates, draft a note, and search the source library.`
-          : "Attach a sanction or a folder. I can read it, score mandates, draft a note, and search the source library."}{" "}
-        Memory and routines stay in this browser.
-      </p>
-      <ul className="mt-5 grid gap-2 sm:grid-cols-2">
-        {DEFAULT_ROUTINES.map((routine) => (
-          <li key={routine.id}>
-            <button
-              type="button"
-              className="h-full w-full cursor-pointer rounded-xl border border-line bg-panel px-3 py-2.5 text-left text-sm font-medium hover:bg-elevated"
-              onClick={() => onPick(routine.prompt)}
-            >
-              {routine.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

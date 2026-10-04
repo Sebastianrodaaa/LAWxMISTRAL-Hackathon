@@ -110,7 +110,9 @@ function AiChainOfThoughtHeader({
         <span className="truncate font-medium">{title}</span>
         {stepCount !== undefined ? (
           <span className="inline-flex shrink-0 items-center rounded-full bg-elevated px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {completedCount !== undefined ? `${completedCount}/${stepCount}` : `${stepCount} steps`}
+            {completedCount !== undefined
+              ? `${completedCount}/${stepCount}`
+              : `${stepCount} ${stepCount === 1 ? "step" : "steps"}`}
           </span>
         ) : null}
       </div>
@@ -132,7 +134,7 @@ function AiChainOfThoughtContent({ children, className }: AiChainOfThoughtConten
     <CollapsiblePrimitive.Content
       data-slot="ai-chain-of-thought-content"
       className={cn(
-        "overflow-hidden border-t border-border data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down",
+        "overflow-hidden border-t border-border data-[state=closed]:h-0 data-[state=closed]:animate-collapsible-up data-[state=closed]:fill-mode-forwards data-[state=open]:animate-collapsible-down data-[state=open]:fill-mode-forwards",
         className,
       )}
     >
@@ -158,7 +160,7 @@ function AiChainOfThoughtStep({ status, title, description, children, className 
         lineClassName: "bg-elevated",
       },
       active: {
-        icon: <Loader2 className="size-4 animate-spin" />,
+        icon: <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />,
         className: "text-blue-600",
         lineClassName: "bg-blue-200",
       },

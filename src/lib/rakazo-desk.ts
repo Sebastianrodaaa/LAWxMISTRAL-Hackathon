@@ -204,6 +204,10 @@ function cleanMessage(message: RakazoMessage): RakazoMessage {
         })
       : undefined,
     citations: cleanCitations(message.citations),
+    elapsedMs:
+      typeof message.elapsedMs === "number" && message.elapsedMs >= 0
+        ? Math.min(Math.round(message.elapsedMs), 30 * 60 * 1000)
+        : undefined,
     attachments: cleanAttachments(message.attachments),
   };
 }

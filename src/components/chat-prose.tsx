@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import type { ChatCitation } from "@/lib/chat-events";
+import { orderCitations } from "@/lib/order-citations";
 
 type Sentence = { text: string; cites: number[] };
 type ProseBlock =
@@ -18,10 +19,11 @@ export function ChatProse({
   citations?: ChatCitation[];
 }) {
   const held = streaming ? holdOpenMarker(text) : { body: text, tail: "" };
-  const blocks = proseBlocks(held.body);
+  const ordered = orderCitations(held.body, citations);
+  const blocks = proseBlocks(ordered.text);
   const baseId = useId();
   if (!blocks.length && !held.tail) return null;
-  const byNumber = new Map(citations.map((item) => [item.n, item]));
+  const byNumber = new Map(ordered.citations.map((item) => [item.n, item]));
   return (
     <div className="space-y-4">
       {blocks.map((block, index) => {
@@ -129,6 +131,7 @@ function sentenceOf(raw: string): Sentence {
     .replace(/\s+/g, " ")
     .replace(/\s+([.?!])/g, "$1")
     .trim();
+  cites.sort((a, b) => a - b);
   return { text, cites };
 }
 

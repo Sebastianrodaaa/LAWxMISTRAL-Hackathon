@@ -171,6 +171,54 @@ textarea {
   }
 }
 
+@keyframes agent-pixel-on {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes agent-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.agent-pixel {
+  animation: agent-pixel-on 650ms cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+.agent-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--faint) 35%,
+    var(--paper) 50%,
+    var(--faint) 65%
+  );
+  background-size: 200% 100%;
+  animation: agent-shimmer 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-pixel,
+  .agent-shimmer {
+    animation: none;
+  }
+
+  .agent-shimmer {
+    color: var(--muted);
+    background-image: none;
+  }
+}
+
 /* Author display beats the browser's closed-popover rule, so a utility
    like `block` would leave every source card on screen. */
 .citation-card:not(:popover-open) {

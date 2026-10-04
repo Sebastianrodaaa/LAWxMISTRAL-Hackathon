@@ -56,6 +56,7 @@ export type RakazoMessage = {
   confidence?: number;
   debate?: { round: number; critic: string; verdict: "needs_revision" | "acceptable" }[];
   citations?: MessageCitation[];
+  elapsedMs?: number;
 };
 
 export type RakazoThread = {

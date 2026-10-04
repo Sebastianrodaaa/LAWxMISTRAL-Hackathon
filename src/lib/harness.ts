@@ -1,6 +1,7 @@
 import type { ChatCitation, ChatEvent } from "./chat-events";
 import { corpus, rankLibrary } from "./corpus";
 import { mistralError } from "./mistral";
+import { orderCitations } from "./order-citations";
 import type { Hit } from "./types";
 
 /**
@@ -143,7 +144,7 @@ Return JSON only, shaped as {"slides":[{"kicker":"","title":"","body":"","bullet
 export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
   const query = input.query.trim().slice(0, 2000);
   const cacheKey = [
-    "cite-v1",
+    "cite-v2",
     input.task,
     input.model,
     query,
@@ -244,7 +245,7 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
     round += 1;
   }
 
-  const citations = publicCitations(retrieved.citations);
+  let citations = publicCitations(retrieved.citations);
   let answer = analysis;
   if (input.task !== "pitch") {
     input.emit?.({ type: "citations", citations });
@@ -260,6 +261,11 @@ export async function runHarness(input: HarnessInput): Promise<HarnessResult> {
     }
     answer = withMarkers(streamed.trim(), analysis);
     if (!streamed.trim() && answer) input.emit?.({ type: "token", text: answer });
+    const published = orderCitations(answer, citations);
+    if (published.citations.length) {
+      answer = published.text;
+      citations = published.citations;
+    }
   }
 
   const result: HarnessResult = {
